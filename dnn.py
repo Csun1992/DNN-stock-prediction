@@ -12,6 +12,8 @@ def trainTestSplit(fileName, trainSize, randomState):
             test_size=1-trainSize, random_state=randomState)
     return (XTrain, XTest, yTrain, yTest) 
 
+
+     
     
 totalDataSize = 345
 trainingPercent = 0.8
@@ -71,4 +73,17 @@ accuracy = tf.reduce_mean(tf.cast(correctPrecision, tf.float32))
 appleTrainFeature, appleTestFeature, appleTrainLabel, appleTestLabel = trainTestSplit('apple',
         trainSize = trainingPercent, randomState = 41)
 
+trainSize = np.size(appleTrainFeature, 0)  
+maxBatchNO = trainSize - batchSize
+
+init = tf.global_variables_initializer()
+    
 with tf.Session() as sess:
+    init.run()
+    testFeed = {x:appleTestFeature, y:appleTestLabel}
+    for i in range(trainingSteps)
+        randomBatch = np.randint(0, maxBatchNO+1)
+        sess.run(trainOp, feed_dict={x:xBatch, y:yBatch})
+
+    testAccuracy  = sess.run(accuracy, feed_dict=testFeed)
+    print("The test accuracy using average is %g"%(testAccurarcy))
