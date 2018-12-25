@@ -1,3 +1,4 @@
+from sys import exit
 import tensorflow as tf
 import sklearn as sk
 from sklearn import model_selection
@@ -7,14 +8,17 @@ def trainTestSplit(fileName, trainSize=0.8, randomState=41):
     clusterData = np.loadtxt('./data/clusterData.txt')
     trainFileName = './data/' + fileName + 'TrainData.txt'
     trainData = np.loadtxt(trainFileName)
-    label = trainData[:, -1]
+    label = transformLabels(trainData[:, -1])
     data = np.concatenate((trainData[:,:-1], clusterData), axis=1)
     XTrain, XTest, yTrain, yTest = model_selection.train_test_split(data, label,
             test_size=1-trainSize, random_state=randomState)
     return (XTrain, XTest, yTrain, yTest) 
 
-
-     
+def transformLabels(label):
+    length = len(label)
+    col1, col2 = [int(i == 0) for i in label], [int(i == 1) for i in label]
+    return np.array([col1, col2]).T
+    
     
 totalDataSize = 345
 trainingPercent = 0.8
@@ -23,8 +27,8 @@ testDataSize = totalDataSize - trainingDataSize
 batchSize = 10
 inputNode = 8 # data dimension is 9
 layer1Node, layer2Node = 2, 2 # Two hidden layers, each has two nodes in it
-outputNode = 1 # binary classification problem 
-learningRateBase = 0.8
+outputNode = 2 # binary classification problem 
+learningRateBase = 0.01 
 learningRateDecay = 0.99
 regularizationRate = 0.0001
 trainingSteps = tf.constant(3000)
@@ -47,27 +51,30 @@ def train(stockData):
     weights2 = tf.Variable(tf.truncated_normal([layer1Node, outputNode], stddev=0.1))
     bias2 = tf.Variable(tf.constant(0.1, shape=[outputNode]))
     yHat = forwardPropagation(x, weights1, bias1, weights2, bias2, None)
-    globalStep = tf.Variable(0, trainable=False)
-    variableAverages = tf.train.ExponentialMovingAverage(movingAverageDecay, globalStep)
-    variablesAveragesOp = variableAverages.apply(tf.trainable_variables()) # run moving average on
+#   globalStep = tf.Variable(0, trainable=False)
+#  variableAverages = tf.train.ExponentialMovingAverage(movingAverageDecay, globalStep)
+# variablesAveragesOp = variableAverages.apply(tf.trainable_variables()) # run moving average on
                                                                           # on all the trainables
-    yAverage = forwardPropagation(x, weights1, bias1, weights2, bias2, variableAverages)
+# yAverage = forwardPropagation(x, weights1, bias1, weights2, bias2, variableAverages)
 
-    crossEntropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=tf.argmax(yHat, 1))
+    crossEntropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=yHat, labels=tf.argmax(y, 1))
     crossEntropyMean = tf.reduce_mean(crossEntropy)
 
     regularizer = tf.contrib.layers.l2_regularizer(regularizationRate)
     regularization = regularizer(weights1) + regularizer(weights2)
     loss = crossEntropyMean + regularization 
 
-    learningRate = tf.train.exponential_decay(learningRateBase, globalStep, trainingDataSize /
-            batchSize, learningRateDecay)
+#    learningRate = tf.train.exponential_decay(learningRateBase, globalStep, trainingDataSize /
+#            batchSize, learningRateDecay)
+    learningRate = tf.constant(learningRateBase) # case when we do not update learning rate
 
-    trainStep = tf.train.GradientDescentOptimizer(learningRate).minimize(loss, global_step=globalStep)
+#    trainStep = tf.train.GradientDescentOptimizer(learningRate).minimize(loss, global_step=globalStep)
+    trainStep = tf.train.GradientDescentOptimizer(learningRate).minimize(loss)
     
-    trainOp = tf.group(trainingSteps,variablesAveragesOp)
+#    trainOp = tf.group(trainingSteps,variablesAveragesOp)
     
-    correctPrediction = tf.equal(tf.argmax(yAverage, 1), tf.argmax(yHat, 1))
+#    correctPrediction = tf.equal(tf.argmax(yAverage, 1), tf.argmax(yHat, 1))
+    correctPrediction = tf.equal(tf.argmax(y, 1), tf.argmax(yHat, 1))
     accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
     
     trainFeature, testFeature, trainLabel, testLabel = trainTestSplit(stockData,
@@ -82,12 +89,15 @@ def train(stockData):
         init.run()
         for i in range(3000):
             randomBatch = np.random.randint(0, maxBatchNO+1)
-            testFeed = {x:testFeature[randomBatch:(randomBatch+batchSize), :],
-                y:testLabel[randomBatch:(randomBatch+batchSize)].reshape(-1,1)}
-            sess.run(trainOp, feed_dict=testFeed)
+            trainFeed = {x:trainFeature[randomBatch:(randomBatch+batchSize), :],
+                y:trainLabel[randomBatch:(randomBatch+batchSize), :]}
+#sess.run(trainOp, feed_dict=trainFeed)
+            sess.run(trainStep, feed_dict=trainFeed)
     
+        testFeed = {x:testFeature, y:testLabel}
         testAccuracy  = sess.run(accuracy, feed_dict=testFeed)
         print testAccuracy
+
 
 
 def main(argv=None):
